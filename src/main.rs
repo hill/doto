@@ -305,7 +305,7 @@ struct Args {
     #[arg(short, long)]
     undone: bool,
 
-    /// Open file with date
+    /// Open file with date (e.g. today, tom, thu, 2021-01-01, 12-01, 07)
     ///
     /// Expects YYYY-MM-DD, MM-DD or DD
     /// Will default to the current year and month if only DD is provided etc
