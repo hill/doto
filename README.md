@@ -47,7 +47,7 @@ Open tomorrow
 
 `$ doto tomorrow` (`$ doto tom`)
 
-Open any day in the previous week:
+Open any day in the current week:
 
 `$ doto tue`
 

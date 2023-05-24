@@ -30,7 +30,11 @@ fn get_today_todo_file_path() -> String {
 #[allow(dead_code)]
 fn get_today_filename() -> String {
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    format!("{}", date)
+    return format!("{}", date);
+}
+
+fn line_is_todo(l: &str) -> bool {
+    return l.trim().starts_with("- [ ]") || l.trim().starts_with("- []");
 }
 
 fn move_undone() {
@@ -73,7 +77,7 @@ fn move_undone() {
         let lines = file_content.lines().collect::<Vec<_>>();
         let undone_tasks = lines
             .iter()
-            .filter(|l| l.trim().starts_with("- [ ]")) // append undone tasks to today's todo file
+            .filter(|l| line_is_todo(l)) // append undone tasks to today's todo file
             .map(|l| {
                 let filename = file.file_name().unwrap().to_str().unwrap();
                 let truncated_file_name = &filename[..filename.len() - 3]; // Remove last three characters
@@ -85,7 +89,7 @@ fn move_undone() {
         let updated_file_content = lines
             .iter()
             .map(|l| {
-                if l.trim().starts_with("- [ ]") {
+                if line_is_todo(l) {
                     let whitespace = l
                         .chars()
                         .take_while(|c| c.is_whitespace())
@@ -162,7 +166,7 @@ fn parse_day_string(date: String) -> Option<NaiveDate> {
             "prev" | "yes" | "yesterday" => parsed_date = Some(today.pred_opt().unwrap()),
             "next" | "tom" | "tomorrow" => parsed_date = Some(today.succ_opt().unwrap()),
             _ => {
-                return None;
+                parsed_date = None;
             }
         }
 
@@ -186,11 +190,10 @@ fn parse_day_string(date: String) -> Option<NaiveDate> {
         };
 
         let mut target_date = today;
-        while target_date.weekday() != target_weekday {
-            if let Some(date) = target_date.pred_opt() {
-                target_date = date;
-            }
-        }
+        let days_until_monday = (today.weekday().num_days_from_monday() + 7 - 1) % 7;
+        target_date = target_date - Duration::days(days_until_monday as i64);
+        let days_until_target = (target_weekday.num_days_from_monday() + 7 - 1) % 7;
+        target_date = target_date + Duration::days(days_until_target as i64);
 
         parsed_date = Some(target_date);
     } else {
