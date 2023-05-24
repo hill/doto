@@ -3,7 +3,9 @@
 doto is a really simple plain text todo list manager written in Rust.
 
 <center>
+<a target="_blank" href="https://twitter.com/levelsio/status/1545387078816497672">
 <img src="./tweet.png" height="500" />
+</a>
 </center>
 
 ---
