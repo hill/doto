@@ -3,14 +3,14 @@ use clap::Parser;
 use std::process::Command;
 
 fn get_doto_path() -> String {
-    let doto_path = std::env::var("DOTO_PATH").unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap();
-        format!("{}/.doto", home)
-    });
+    let doto_path = std::env::var("DOTO_PATH").unwrap_or(format!(
+        "{}/.doto",
+        std::env::var("HOME").expect("Could not get $HOME or $DOTO_PATH")
+    ));
     // create doto directory if it doesn't exist
     if !std::path::Path::new(&doto_path).exists() {
         println!("Creating doto directory at {}", doto_path);
-        std::fs::create_dir(doto_path.clone()).unwrap();
+        std::fs::create_dir(doto_path.clone()).expect("Could not create doto directory");
     }
     doto_path
 }
@@ -32,17 +32,22 @@ fn move_undone() {
 
     // get all todo files in the past
     let todo_files = std::fs::read_dir(get_doto_path())
-        .unwrap()
+        .expect("Could not read doto directory")
         .filter(|f| f.is_ok())
-        .map(|f| f.unwrap().path())
+        .map(|f| f.expect("Unable to read file").path())
         .filter(|f| f.is_file())
-        .filter(|f| match f.extension().unwrap() {
-            ext if ext == "md" => true,
-            _ => false,
-        })
+        .filter(
+            |f| match f.extension().expect("Could not get file extension") {
+                ext if ext == "md" => true,
+                _ => false,
+            },
+        )
         .filter(|f| {
             let file_date = chrono::NaiveDate::parse_from_str(
-                f.file_name().unwrap().to_str().unwrap(),
+                f.file_name()
+                    .expect("Unable to read file name")
+                    .to_str()
+                    .unwrap(),
                 "%Y-%m-%d.md",
             )
             .unwrap();
@@ -107,7 +112,8 @@ fn open_file(filename: String) {
 
     // create todo file if it doesn't exist
     if !std::path::Path::new(&todo_file).exists() {
-        std::fs::write(&todo_file, format!("# {}", filename)).unwrap();
+        std::fs::write(&todo_file, format!("# {}", filename))
+            .expect("Unable to write a new todo file");
     }
 
     // open today's todo file in user's default editor

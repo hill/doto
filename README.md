@@ -2,7 +2,7 @@
 
 doto is a really simple `todo.txt` manager written in Rust.
 
-I like `todo.txt`s but I also like a little bit of management
+I like `todo.txt`s but I also like a little bit of management lol.
 
 <center>
 <a target="_blank" href="https://twitter.com/levelsio/status/1545387078816497672">
@@ -24,6 +24,8 @@ All todo files are plaintext `.md` files that look like this:
 - [ ] fix SQL parsing bug
 - [>] get licence checks working (2023-05-28)
 ```
+
+They will open in your `$EDITOR` or vim if you haven't defined it
 
 You can style the text todo files however you would like as long as the task begins with `- [ ]` (to enable task counting and moving capabilities)
 
