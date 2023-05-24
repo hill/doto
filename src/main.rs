@@ -1,6 +1,11 @@
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate};
 use clap::Parser;
-use std::process::Command;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Write},
+    path::PathBuf,
+    process::Command,
+};
 
 fn get_doto_path() -> String {
     let doto_path = std::env::var("DOTO_PATH").unwrap_or(format!(
@@ -22,6 +27,7 @@ fn get_today_todo_file_path() -> String {
     path
 }
 
+#[allow(dead_code)]
 fn get_today_filename() -> String {
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     format!("{}", date)
@@ -43,15 +49,20 @@ fn move_undone() {
             },
         )
         .filter(|f| {
-            let file_date = chrono::NaiveDate::parse_from_str(
-                f.file_name()
-                    .expect("Unable to read file name")
-                    .to_str()
-                    .unwrap(),
-                "%Y-%m-%d.md",
-            )
-            .unwrap();
-            file_date < chrono::Local::now().naive_local().date()
+            let file_date = match f.file_name().and_then(|name| name.to_str()) {
+                Some(name) if name.ends_with(".md") => {
+                    match chrono::NaiveDate::parse_from_str(&name[..name.len() - 3], "%Y-%m-%d") {
+                        Ok(date) => Some(date),
+                        Err(_) => None,
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(file_date) = file_date {
+                return file_date < chrono::Local::now().naive_local().date();
+            }
+            return false; // ignore files that don't have a date in their name
         })
         .collect::<Vec<_>>();
 
@@ -62,7 +73,7 @@ fn move_undone() {
         let lines = file_content.lines().collect::<Vec<_>>();
         let undone_tasks = lines
             .iter()
-            .filter(|l| l.starts_with("- [ ]")) // append undone tasks to today's todo file
+            .filter(|l| l.trim().starts_with("- [ ]")) // append undone tasks to today's todo file
             .map(|l| {
                 let filename = file.file_name().unwrap().to_str().unwrap();
                 let truncated_file_name = &filename[..filename.len() - 3]; // Remove last three characters
@@ -74,9 +85,15 @@ fn move_undone() {
         let updated_file_content = lines
             .iter()
             .map(|l| {
-                if l.starts_with("- [ ]") {
+                if l.trim().starts_with("- [ ]") {
+                    let whitespace = l
+                        .chars()
+                        .take_while(|c| c.is_whitespace())
+                        .collect::<String>();
+
+                    // add date to line
                     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-                    format!("- [>] ({}) {}", date, &l[6..])
+                    format!("{}- [>] ({}) {}", whitespace, date, &l[6..])
                 } else {
                     l.to_string()
                 }
@@ -106,7 +123,7 @@ fn move_undone() {
     );
 }
 
-fn open_file(filename: String) {
+fn get_or_make_file(filename: String) -> String {
     let doto_path = get_doto_path();
     let todo_file = format!("{}/{}.md", doto_path, filename);
 
@@ -115,6 +132,12 @@ fn open_file(filename: String) {
         std::fs::write(&todo_file, format!("# {}", filename))
             .expect("Unable to write a new todo file");
     }
+
+    return todo_file;
+}
+
+fn open_file(filename: String) {
+    let todo_file = get_or_make_file(filename);
 
     // open today's todo file in user's default editor
     let editor = std::env::var("EDITOR").unwrap_or("vim".to_string());
@@ -135,7 +158,7 @@ fn parse_day_string(date: String) -> Option<NaiveDate> {
     let mut parsed_date: Option<NaiveDate> = None;
     if date.chars().all(|c| c.is_alphabetic()) {
         match date.to_lowercase().as_str() {
-            "today" => parsed_date = Some(today),
+            "now" | "t" | "today" => parsed_date = Some(today),
             "prev" | "yes" | "yesterday" => parsed_date = Some(today.pred_opt().unwrap()),
             "next" | "tom" | "tomorrow" => parsed_date = Some(today.succ_opt().unwrap()),
             _ => {
@@ -209,6 +232,69 @@ fn open_date(date: String) {
     open_file(date);
 }
 
+fn open_week() {
+    let doto_path = get_doto_path();
+    let combined_path = format!("{}/todo.md", doto_path);
+    let today = chrono::Local::now().naive_local();
+    // let start_of_week = today - Duration::days(today.weekday().num_days_from_monday() as i64);
+    let start = today;
+    let start_of_range = start - Duration::days(4);
+    let end_of_range = start + Duration::days(3);
+
+    let mut combined_file =
+        File::create(combined_path.clone()).expect("Failed to create combined file");
+    let mut day = start_of_range;
+    while day < end_of_range {
+        let date = day.format("%Y-%m-%d").to_string();
+        // TODO: make function that will create the file
+        let path = PathBuf::from(get_or_make_file(date.clone()));
+        if path.exists() {
+            let file = File::open(path).expect("Failed to open file");
+            let reader = BufReader::new(file);
+            reader.lines().for_each(|line| {
+                let line = line.expect("Failed to read line");
+                combined_file
+                    .write_fmt(format_args!("{}\n", line))
+                    .expect("failed to write line");
+            });
+            combined_file
+                .write_all(b"---\n")
+                .expect("failed to write line");
+        }
+        day = day + Duration::days(1);
+    }
+
+    open_file("todo".to_string());
+
+    let combined_file = File::open(combined_path).expect("Failed to open combined file");
+    let reader = BufReader::new(combined_file);
+    let mut current_file: Option<File> = None;
+
+    for line in reader.lines() {
+        let line = line.expect("Failed to read line");
+        if line.eq("---") {
+            continue; // dont' write the --- line
+        }
+        if line.starts_with("# ") {
+            if let Some(mut file) = current_file {
+                file.flush().expect("Failed to flush file");
+            }
+            let date_str = line.trim_start_matches("# ").trim();
+            let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").expect("Invalid date");
+            let path = PathBuf::from(format!("{}/{}.md", doto_path, date.format("%Y-%m-%d")));
+            let file = File::create(path).expect("Failed to create file");
+            current_file = Some(file);
+        }
+        if let Some(file) = &mut current_file {
+            writeln!(file, "{}", line).expect("Failed to write line");
+        }
+    }
+
+    if let Some(mut file) = current_file {
+        file.flush().expect("Failed to flush file");
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -233,7 +319,7 @@ fn main() {
     } else {
         match args.date {
             Some(date) => open_date(date),
-            None => open_today(),
+            None => open_week(),
         }
     }
 }

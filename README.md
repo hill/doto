@@ -31,9 +31,13 @@ You can style the text todo files however you would like as long as the task beg
 
 The files are saved in your `$DOTO_PATH` directory or `~/.doto`. You can sync this to git or do whatever your want with it.
 
-Open today's todo with
+Open a combined view of the last 4 and next 3 days:
 
 `$ doto`
+
+Open today's todo with
+
+`$ doto today` (`$ doto now` or `$ doto t` also work)
 
 Move all previously undone tasks to today
 
