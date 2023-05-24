@@ -1,6 +1,6 @@
 # doto todo ✅
 
-doto is a really simple plain text todo list manager written in Rust.
+doto is a really simple `todo.txt` manager written in Rust.
 
 I like `todo.txt`s but I also like a little bit of management
 
