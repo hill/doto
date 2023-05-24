@@ -2,6 +2,8 @@
 
 doto is a really simple plain text todo list manager written in Rust.
 
+I like `todo.txt`s but I also like a little bit of management
+
 <center>
 <a target="_blank" href="https://twitter.com/levelsio/status/1545387078816497672">
 <img src="./tweet.png" height="500" />
