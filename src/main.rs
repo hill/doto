@@ -37,6 +37,22 @@ fn line_is_todo(l: &str) -> bool {
     return l.trim().starts_with("- [ ]") || l.trim().starts_with("- []");
 }
 
+// TODO: create stats
+#[allow(dead_code)]
+fn line_is_completed_todo(l: &str) -> bool {
+    return l.trim().starts_with("- [x]") || l.trim().starts_with("- [X]");
+}
+
+#[allow(dead_code)]
+fn line_is_rescheduled_todo(l: &str) -> bool {
+    return l.trim().starts_with("- [>]");
+}
+
+#[allow(dead_code)]
+fn line_is_note(l: &str) -> bool {
+    return l.trim().starts_with("- ");
+}
+
 fn move_undone() {
     // move all undone tasks to today's todo file
 
@@ -151,11 +167,6 @@ fn open_file(filename: String) {
         .expect("Could not open file");
 }
 
-fn open_today() {
-    let today_todo_file = get_today_filename();
-    open_file(today_todo_file);
-}
-
 #[allow(unused_assignments)]
 fn parse_day_string(date: String) -> Option<NaiveDate> {
     let today = chrono::Local::now().date_naive();
@@ -227,6 +238,11 @@ fn parse_day_string(date: String) -> Option<NaiveDate> {
 }
 
 fn open_date(date: String) {
+    if date == "later" {
+        open_file("later".to_string());
+        return;
+    }
+
     let parsed_date = parse_day_string(date);
     let date = parsed_date
         .expect("Invalid date")
@@ -267,6 +283,19 @@ fn open_week() {
         day = day + Duration::days(1);
     }
 
+    // append the later file
+    let later_path = get_or_make_file("later".to_string());
+    let later_file = File::open(later_path);
+    if let Ok(later_file) = later_file {
+        let reader = BufReader::new(later_file);
+        reader.lines().for_each(|line| {
+            let line = line.expect("Failed to read line");
+            combined_file
+                .write_fmt(format_args!("{}\n", line))
+                .expect("failed to write line");
+        });
+    }
+
     open_file("todo".to_string());
 
     let combined_file = File::open(combined_path).expect("Failed to open combined file");
@@ -283,8 +312,15 @@ fn open_week() {
                 file.flush().expect("Failed to flush file");
             }
             let date_str = line.trim_start_matches("# ").trim();
-            let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").expect("Invalid date");
-            let path = PathBuf::from(format!("{}/{}.md", doto_path, date.format("%Y-%m-%d")));
+
+            // TODO: we could probs simplify this by just not parsing the date and just using # to find title
+            // I feel that this might be a bit brittle though as user may want to use # elsewhere in file?
+            // should probably just read line after `---`
+            let mut path = PathBuf::from(format!("{}/{}.md", doto_path, "later"));
+            if date_str != "later" {
+                let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").expect("Invalid date");
+                path = PathBuf::from(format!("{}/{}.md", doto_path, date.format("%Y-%m-%d")));
+            }
             let file = File::create(path).expect("Failed to create file");
             current_file = Some(file);
         }
