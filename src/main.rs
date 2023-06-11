@@ -23,17 +23,16 @@ struct Cli {
     #[clap(short, long)]
     sync: bool,
 
-    // Login for syncing
-    // #[clap(short, long)]
-    // login: bool,
-    // Sync all todo files
     #[clap(subcommand)]
     command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Login for syncing files
     Login,
+
+    /// Sync all files
     Sync,
 }
 
