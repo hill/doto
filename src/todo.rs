@@ -105,6 +105,23 @@ pub fn open_week() {
     }
 }
 
+pub fn get_all_files() -> Vec<PathBuf> {
+    let doto_path = get_doto_path();
+    let mut files = vec![];
+    let todo_files = std::fs::read_dir(doto_path)
+        .expect("Could not read doto directory")
+        .filter(|f| f.is_ok())
+        .map(|f| f.expect("Unable to read file").path())
+        .filter(|f| f.is_file())
+        .filter(|f| {
+            let file_name = f.file_name().unwrap().to_str().unwrap();
+            file_name.ends_with(".md") && file_name != "later.md"
+        })
+        .collect::<Vec<PathBuf>>();
+    files.extend(todo_files);
+    files
+}
+
 fn line_is_todo(l: &str) -> bool {
     return l.trim().starts_with("- [ ]") || l.trim().starts_with("- []");
 }

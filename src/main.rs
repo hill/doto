@@ -34,6 +34,7 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     Login,
+    Sync,
 }
 
 fn main() {
@@ -41,11 +42,10 @@ fn main() {
 
     match &cli.command {
         Some(Commands::Login) => sync::auth::login(),
+        Some(Commands::Sync) => sync::files::sync_files(),
         _ => {
             // default behaviour
-            if cli.sync {
-                println!("Syncing...");
-            } else if cli.undone {
+            if cli.undone {
                 todo::move_undone();
             } else {
                 match cli.date {

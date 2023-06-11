@@ -10,6 +10,8 @@ about = "doto todos is a simple, day-to-day todo list manager."
 [dependencies]
 chrono = "0.4"
 clap = { version = "4.3.0", features = ["derive"] }
+dirs = "5.0.1"
+indicatif = "0.17.5"
 open = "4.1.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 serde = {version = "1.0.164", features = ["derive"]}
