@@ -1,8 +1,13 @@
 use chrono::DateTime;
-use std::{io::Write, path::PathBuf, time::SystemTime};
+use std::{
+    io::Write,
+    path::{self, PathBuf},
+    time::SystemTime,
+};
 
 use indicatif::ProgressBar;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 pub fn sync_files() {
     let Some(access_token) = crate::sync::auth::get_access_token() else {
@@ -11,60 +16,49 @@ pub fn sync_files() {
     };
     let todo_files = crate::todo::get_all_files();
 
-    println!("Using access token: {}", access_token);
     let uploaded = list_uploaded_files(&access_token).expect("Failed to list uploaded files");
 
     // transform into a map for easy lookup
-    let uploaded_files: std::collections::HashMap<String, SystemTime> = uploaded
+    let uploaded_files: std::collections::HashMap<String, (String, SystemTime)> = uploaded
         .files
         .into_iter()
-        .map(|f| {
-            let parsed_date = parse_js_date(&f.last_modified);
-            // println!("{}: {:?}", f.name, parsed_date);
-            (f.name, parsed_date)
-        })
+        .map(|f| (f.name, (f.hash, parse_js_date(&f.last_modified))))
         .collect();
 
     let modified_todo_files = todo_files
         .iter()
         .filter(|file| {
             let last_modified = get_last_modified_time(&file).expect("Failed to get last modified");
-            if let Some(last_modified_uploaded) =
+            if let Some(uploaded_file) =
                 uploaded_files.get(file.file_name().unwrap().to_str().unwrap())
             {
-                if last_modified <= *last_modified_uploaded {
+                if hash_file(&file) == *uploaded_file.0 {
                     return false;
                 }
+
+                // Server version is more recent
+                if last_modified < uploaded_file.1 {
+                    return false;
+                }
+
+                println!("Local version more recent: {:?}", file);
             }
             true
         })
-        .collect::<Vec<&PathBuf>>();
+        .map(|f| f.to_path_buf())
+        .collect::<Vec<PathBuf>>();
 
-    let pb = ProgressBar::new(modified_todo_files.len() as u64);
-    for file in modified_todo_files {
-        upload_file(&file, &access_token).expect("Failed to upload file");
-        pb.inc(1);
+    let mut files_to_download = Vec::new();
+    let todo_dir = path::PathBuf::from(crate::util::get_doto_path());
+    for (filename, (hash, _)) in uploaded_files.iter() {
+        let file_path = todo_dir.join(filename);
+        if !modified_todo_files.contains(&file_path) {
+            if !file_path.exists() || hash_file(&file_path) != *hash {
+                files_to_download.push(file_path.clone());
+                println!("Server file more recent: {:?}", file_path)
+            }
+        }
     }
-    pb.finish_with_message("Upload complete.");
-
-    let server_modified_files = todo_files
-        .iter()
-        .filter(|file| {
-            let last_modified = get_last_modified_time(&file).expect("Failed to get last modified");
-            if let Some(last_modified_uploaded) =
-                uploaded_files.get(file.file_name().unwrap().to_str().unwrap())
-            {
-                if last_modified >= *last_modified_uploaded {
-                    return false;
-                }
-                // println!(
-                //     "Will download {:?} because {:?} < remote {:?}",
-                //     file, last_modified, last_modified_uploaded
-                // );
-            }
-            true
-        })
-        .collect::<Vec<&PathBuf>>();
 
     // TODO:
     // - more robust comparison of modified time ... currently always uploads / downloads because of upload time
@@ -73,8 +67,20 @@ pub fn sync_files() {
     // - handle new files on server
     // - parrallelize upload / download
 
-    let pb = ProgressBar::new(server_modified_files.len() as u64);
-    for file in server_modified_files {
+    let total_files: u64 = (modified_todo_files.len() + files_to_download.len()) as u64;
+
+    if total_files == 0 {
+        println!("Up to date.");
+        return;
+    }
+
+    let pb = ProgressBar::new(total_files);
+    for file in &modified_todo_files {
+        upload_file(file, &access_token).expect("Failed to upload file");
+        pb.inc(1);
+    }
+
+    for file in files_to_download {
         pb.inc(1);
         let downloaded = download_file(&file, &access_token).expect("Failed to download file");
         let mut editable_file = std::fs::File::create(file).expect("Failed to create file");
@@ -82,7 +88,7 @@ pub fn sync_files() {
             .write(downloaded.as_bytes())
             .expect("Failed to write file");
     }
-    pb.finish_with_message("Download complete.");
+    pb.finish_with_message("Sync complete.");
 }
 
 fn upload_file(file_path: &PathBuf, access_token: &String) -> Result<(), reqwest::Error> {
@@ -116,6 +122,7 @@ struct ListUploadedFilesResponse {
 struct UploadedFile {
     name: String,
     last_modified: String,
+    hash: String,
 }
 
 fn list_uploaded_files(access_token: &String) -> Result<ListUploadedFilesResponse, reqwest::Error> {
@@ -131,7 +138,6 @@ fn list_uploaded_files(access_token: &String) -> Result<ListUploadedFilesRespons
 
 #[derive(Deserialize, Debug)]
 struct DownloadedFile {
-    name: String,
     content: String,
 }
 
@@ -153,4 +159,19 @@ fn parse_js_date(js_date: &String) -> SystemTime {
     let dt = DateTime::parse_from_rfc3339(js_date).unwrap();
     let ts = dt.timestamp();
     SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(ts as u64)
+}
+
+fn hash_file(file_path: &PathBuf) -> String {
+    let mut hasher = Sha256::new();
+
+    let file_contents = std::fs::read_to_string(file_path)
+        .expect(format!("Could not read file contents: {:?}", file_path).as_str());
+    hasher.update(file_contents);
+
+    let result = hasher.finalize();
+
+    return result
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
 }
