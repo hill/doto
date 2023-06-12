@@ -69,7 +69,7 @@ pub fn open_week() {
 
     open_file("todo".to_string());
 
-    let combined_file = File::open(combined_path).expect("Failed to open combined file");
+    let combined_file = File::open(combined_path.clone()).expect("Failed to open combined file");
     let reader = BufReader::new(combined_file);
     let mut current_file: Option<File> = None;
 
@@ -103,6 +103,9 @@ pub fn open_week() {
     if let Some(mut file) = current_file {
         file.flush().expect("Failed to flush file");
     }
+
+    // delete the combined file
+    std::fs::remove_file(combined_path).expect("Failed to remove combined file");
 }
 
 pub fn get_all_files() -> Vec<PathBuf> {
